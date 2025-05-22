@@ -558,6 +558,9 @@ func avoid_initialize() -> void:
 	avoid_start()
 
 func avoid_start() -> void:
+	for panel: PuzzlePanel in get_all_panels():
+		panel.collision_box.size = Vector3(0.8, 100.0, 0.8)
+	
 	var size := 3
 	while avoid_rounds > 0:
 		if not avoid_safe_panels.is_empty():
@@ -641,6 +644,8 @@ func avoid_player_stepped_on(panel : PuzzlePanel) -> void:
 func avoid_end() -> void:
 	avoid_timer.queue_free()
 	set_all_panel_shapes(PuzzlePanel.PanelShape.NOTHING)
+	for panel: PuzzlePanel in get_all_panels():
+		panel.collision_box.size = Vector3(0.72, 100.0, 0.72)
 
 #endregion
 
@@ -648,7 +653,7 @@ func avoid_end() -> void:
 
 var finder_bombs : Array[Vector2i] = []
 ## Number of bombs game attempts to place
-var finder_bomb_count := 32
+var finder_bomb_count := 28
 var finder_panels := {}
 var finder_current_row := 0
 signal s_finder_row_reached(row_num: int)
@@ -656,7 +661,7 @@ signal s_finder_row_reached(row_num: int)
 ## Document each panel place and place bombs
 func finder_initialize() -> void:
 	if Util.on_easy_floor():
-		finder_bomb_count = 28
+		finder_bomb_count = 24
 	
 	while finder_bomb_count > 0:
 		var pos_check := Vector2i(RandomService.randi_channel('puzzles')%grid_width,(RandomService.randi_channel('puzzles')%(grid_height-2))+1)

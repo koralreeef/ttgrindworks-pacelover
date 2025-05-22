@@ -5,7 +5,7 @@ const SFX_OPEN := preload("res://audio/sfx/ui/GUI_stickerbook_open.ogg")
 const SFX_CLOSE := preload("res://audio/sfx/ui/GUI_stickerbook_delete.ogg")
 const SFX_STAT_CHANGE := preload("res://audio/sfx/ui/sfx_pop.ogg")
 const ANOMALY_ICON := preload("res://objects/player/ui/anomaly_icon.tscn")
-
+const INPUT_DELAY := 0.25
 
 @onready var StatInfo: Array = [
 	[%Damage, "damage"],
@@ -23,20 +23,28 @@ const ANOMALY_ICON := preload("res://objects/player/ui/anomaly_icon.tscn")
 var page_current := 0:
 	set(x):
 		if not is_node_ready(): await ready
+		var force_dir := -1
 		if x < 0:
 			x = menu_pages.get_child_count() - 1
+			force_dir = 0
 		elif x >= menu_pages.get_child_count():
 			x = 0
+			force_dir = 1
+		
 		set_page_view(x)
-		if x > page_current:
-			do_page_transition(menu_pages.get_child(page_current), menu_pages.get_child(x), 1)
-		else:
-			do_page_transition(menu_pages.get_child(page_current), menu_pages.get_child(x), 0)
+		
+		if force_dir == -1:
+			if x > page_current: force_dir = 1
+			else: force_dir = 0
+		
+		do_page_transition(menu_pages.get_child(page_current), menu_pages.get_child(x), force_dir)
+		
 		page_current = x
+
+var open_time := 0.0
 
 
 func _ready() -> void:
-	hide()
 	get_tree().paused = true
 	get_player_info()
 	
@@ -65,9 +73,12 @@ func _ready() -> void:
 
 	if AnimatePauseMenu:
 		$AnimationPlayer.play("pause_on")
-		show()
 	
 	Globals.s_game_paused.emit(self)
+	
+	await get_tree().process_frame
+	%Pages.show()
+	%TopLevelElements.show()
 
 func apply_stat_labels() -> void:
 	for stat_array: Array in StatInfo:
@@ -188,7 +199,10 @@ func on_quest_complete() -> void:
 	%GagPanel.refresh()
 
 
-func _physics_process(_delta : float) -> void:
+func _process(delta : float) -> void:
+	if open_time < INPUT_DELAY:
+		open_time += delta
+		return
 	if Input.is_action_just_pressed('pause'):
 		resume()
 	if Input.is_action_just_pressed('move_left'):
