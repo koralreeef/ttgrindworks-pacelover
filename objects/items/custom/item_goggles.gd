@@ -15,12 +15,12 @@ var loadout : GagLoadout
 
 func on_collect(_item: Item, _model: Node3D) -> void:
 	setup()
+	Util.get_player().stats.battle_timers.append(10)
 
 func on_load(_item: Item) -> void:
 	setup()
 
 func setup() -> void:
-	BattleService.s_round_ended.connect(on_round_reset)
 	BattleService.s_battle_started.connect(on_battle_start)
 
 ## Connect the gag track elements up to be shuffled
@@ -35,7 +35,6 @@ func initialize_ui(manager: BattleManager) -> void:
 		element.refresh()
 	
 	# Also run the round reset method for this first round
-	on_round_reset(manager)
 	ui.s_turn_complete.connect(on_turn_complete)
 
 ## Shuffles the gag order of each track
@@ -47,10 +46,7 @@ func on_track_refresh(element: Control) -> void:
 
 ## Runs the battle timer at the beginning of each round
 func on_round_reset(manager: BattleManager) -> void:
-	var player = Util.get_player()
-	if player.character.character_name == "pacelover2000":
-		THIS_ROUND_TIME = Util.get_player().stats.remaining_time
-	timer = Util.run_timer(THIS_ROUND_TIME, TIMER_ANCHOR)
+	timer = Util.run_timer(ROUND_TIME, TIMER_ANCHOR)
 	timer.timer.timeout.connect(on_timeout.bind(manager.battle_ui))
 	timer.reparent(manager.battle_ui)
 	if manager.cogs.size() > 0:

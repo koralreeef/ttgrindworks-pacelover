@@ -36,6 +36,7 @@ var illegal_moves : Array[Script] = []
 var boss_battle := false
 var current_round := 0
 var has_moved : Array[Node3D] = []
+var is_round_ongoing := false
 
 ## Signals
 signal s_focus_char(character: Node3D)
@@ -111,6 +112,7 @@ func begin_turn():
 	battle_ui.hide()
 	apply_battle_speed()
 	current_round += 1
+	is_round_ongoing = true
 	# Inject partner moves before player's
 	for partner in Util.get_player().partners:
 		inject_battle_action(partner.get_attack(), 0)
@@ -152,6 +154,10 @@ func run_actions():
 
 # Removes dead battle participant
 func someone_died(who: Node3D) -> void:
+	# If anyone has any last minute objections,
+	# Make them known
+	s_participant_will_die.emit(who)
+	
 	# Allow for revives to take place
 	if 'stats' in who:
 		var stats: BattleStats = who.stats
@@ -183,8 +189,6 @@ func someone_died(who: Node3D) -> void:
 			status_effects.erase(status)
 			status.cleanup()
 			continue
-
-	s_participant_will_die.emit(who)
 
 func kill_someone(who: Node3D, signal_only := false) -> void:
 	s_participant_died.emit(who)
@@ -233,6 +237,7 @@ func round_over():
 			round_actions = []
 			battle_node.reposition_cogs()
 			has_moved.clear()
+			is_round_ongoing = false
 
 func end_battle() -> void:
 	# End battle
@@ -246,10 +251,21 @@ func end_battle() -> void:
 	Engine.time_scale = 1 + pitch
 	AudioManager.tween_music_pitch(0.5, Engine.time_scale)
 	player.set_animation('victory_dance')
+	player.game_timer_tick = false
 	await player.animator.animation_finished
+	player.game_timer_tick = true
 	player.state = Player.PlayerState.WALK
 	player.camera.make_current()
 	AudioManager.stop_music()
+	spawn_reward()
+	# Reset player & partners as persistent nodes
+	SceneLoader.add_persistent_node(player)
+	for partner in player.partners:
+		SceneLoader.add_persistent_node(partner)
+	s_round_ended.emit()
+	s_battle_ended.emit()
+
+func spawn_reward() -> void:
 	# Battle drops
 	if boss_battle:
 		Util.make_boss_chests(battle_node.get_parent(), battle_node)
@@ -271,12 +287,6 @@ func end_battle() -> void:
 			else:
 				chest.item_pool = battle_node.item_pool
 			chest.override_replacement_rolls = RandomService.randi_channel('true_random') % 2 == 0
-	# Reset player & partners as persistent nodes
-	SceneLoader.add_persistent_node(player)
-	for partner in player.partners:
-		SceneLoader.add_persistent_node(partner)
-	s_round_ended.emit()
-	s_battle_ended.emit()
 
 func is_target_dead(target: Node3D) -> bool:
 	var health_ratio: float = float(target.stats.hp) / float(target.stats.max_hp)
@@ -641,8 +651,11 @@ func force_unlure(target: Cog) -> void:
 			lure_effect = effect
 	if not lure_effect:
 		return
+	if lure_effect.lure_type == StatusLured.LureType.DAMAGE_DOWN:
+		battle_stats[target].damage *= (1/ lure_effect.damage_nerf)
 	if target.stats.hp > 0 and lure_effect.lure_type == StatusLured.LureType.STUN and not target in has_moved:
 		unskip_turn(target)
+
 
 func unskip_turn(who: Actor) -> void:
 	if who is Cog:
@@ -697,7 +710,11 @@ func do_standalone_knockback_damage(cog: Cog, damage: int) -> void:
 	battle_text(cog, "-" + str(damage), Color('ff4d00'), Color('802200'))
 
 func get_knockback_damage(cog: Cog) -> int:
-	return find_cog_lure(cog).knockback_effect
+	var fake_action := ToonAttack.new()
+	fake_action.user = Util.get_player()
+	fake_action.targets = [cog]
+	fake_action.damage = find_cog_lure(cog).knockback_effect
+	return get_damage(fake_action.damage, fake_action, cog)
 
 func find_cog_lure(cog: Cog) -> StatusLured:
 	for effect in status_effects:
